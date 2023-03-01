@@ -109,6 +109,7 @@ exports.Inputs = void 0;
 var Inputs;
 (function (Inputs) {
     Inputs["Name"] = "name";
+    Inputs["Commit"] = "commit";
     Inputs["Title"] = "title";
     Inputs["Path"] = "path";
     Inputs["Token"] = "token";
@@ -182,6 +183,7 @@ function run() {
             const path = core.getInput(constants_1.Inputs.Path, { required: true });
             const name = core.getInput(constants_1.Inputs.Name);
             const title = core.getInput(constants_1.Inputs.Title);
+            const commit = core.getInput(constants_1.Inputs.Commit);
             const searchResult = yield search_1.findResults(path);
             if (searchResult.filesToUpload.length === 0) {
                 core.warning(`No files were found for the provided path: ${path}. No results will be uploaded.`);
@@ -196,8 +198,10 @@ function run() {
                     : [annotations];
                 core.debug(`Created ${groupedAnnotations.length} buckets`);
                 const conclusion = getConclusion(annotations);
+                let total = 0;
                 for (const annotationSet of groupedAnnotations) {
-                    yield createCheck(name, title, annotationSet, annotations.length, conclusion);
+                    yield createCheck(name, commit, title, annotationSet, total, annotations.length, conclusion);
+                    total += annotationSet.length;
                 }
             }
         }
@@ -221,19 +225,19 @@ function getConclusion(annotations) {
     }
     return 'success';
 }
-function createCheck(name, title, annotations, numErrors, conclusion) {
+function createCheck(name, commit, title, annotations, processedErrors, numErrors, conclusion) {
     return __awaiter(this, void 0, void 0, function* () {
-        core.info(`Uploading ${annotations.length} / ${numErrors} annotations to GitHub as ${name} with conclusion ${conclusion}`);
+        const head_sha = commit ||
+            (github_2.context.payload.pull_request && github_2.context.payload.pull_request.head.sha) ||
+            github_2.context.sha;
         const octokit = github_2.getOctokit(core.getInput(constants_1.Inputs.Token));
-        let sha = github_2.context.sha;
-        if (github_2.context.payload.pull_request) {
-            sha = github_2.context.payload.pull_request.head.sha;
-        }
-        const req = Object.assign(Object.assign({}, github_2.context.repo), { ref: sha });
+        const req = Object.assign(Object.assign({}, github_2.context.repo), { ref: head_sha });
         const res = yield octokit.checks.listForRef(req);
         const existingCheckRun = res.data.check_runs.find(check => check.name === name);
+        core.info(`Uploading ${processedErrors} + ${annotations.length} / ${numErrors} annotations to ${existingCheckRun ? "existing" : "new"} GitHub check @${head_sha} as ${name} with conclusion ${conclusion}`);
         if (!existingCheckRun) {
-            const createRequest = Object.assign(Object.assign({}, github_2.context.repo), { head_sha: sha, conclusion,
+            const createRequest = Object.assign(Object.assign({}, github_2.context.repo), { head_sha,
+                conclusion,
                 name, status: 'completed', output: {
                     title,
                     summary: `${numErrors} violation(s) found`,
