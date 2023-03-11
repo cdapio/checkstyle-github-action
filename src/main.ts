@@ -17,6 +17,7 @@ async function run(): Promise<void> {
     const changedSince = core.getInput(Inputs.ChangedSince)
 
     const filter = await getFilter(commit, changedSince)
+    core.debug(`Got the filter of ${filter} files, e.g. ${filter.slice(0, 3)}`)
     const searchResult = await findResults(path)
     if (searchResult.filesToUpload.length === 0) {
       core.warning(
@@ -28,13 +29,15 @@ async function run(): Promise<void> {
       )
       core.debug(`Root artifact directory is ${searchResult.rootDirectory}`)
 
-      const annotations: Annotation[] = chain(
+      const allAnnotations: Annotation[] = chain(
         annotationsForPath,
         searchResult.filesToUpload
-      ).filter(annotation => filter.length == 0 || filter.includes(annotation.path))
+      )
+      const annotations = filter.length == 0 ? allAnnotations :
+        allAnnotations.filter(annotation => filter.includes(annotation.path))
 
       core.debug(
-        `Grouping ${annotations.length} annotations into chunks of ${MAX_ANNOTATIONS_PER_REQUEST}`
+        `Grouping ${annotations.length} filtered out of ${allAnnotations.length} annotations into chunks of ${MAX_ANNOTATIONS_PER_REQUEST}`
       )
 
       const groupedAnnotations: Annotation[][] =

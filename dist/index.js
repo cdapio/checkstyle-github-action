@@ -113,7 +113,7 @@ var Inputs;
     Inputs["Title"] = "title";
     Inputs["Path"] = "path";
     Inputs["Token"] = "token";
-    Inputs["Token"] = "token";
+    Inputs["ChangedSince"] = "changed-since";
 })(Inputs = exports.Inputs || (exports.Inputs = {}));
 
 
@@ -185,6 +185,9 @@ function run() {
             const name = core.getInput(constants_1.Inputs.Name);
             const title = core.getInput(constants_1.Inputs.Title);
             const commit = core.getInput(constants_1.Inputs.Commit);
+            const changedSince = core.getInput(constants_1.Inputs.ChangedSince);
+            const filter = yield getFilter(commit, changedSince);
+            core.debug(`Got the filter of ${filter} files, e.g. ${filter.slice(0, 3)}`);
             const searchResult = yield search_1.findResults(path);
             if (searchResult.filesToUpload.length === 0) {
                 core.warning(`No files were found for the provided path: ${path}. No results will be uploaded.`);
@@ -192,8 +195,10 @@ function run() {
             else {
                 core.info(`With the provided path, there will be ${searchResult.filesToUpload.length} results uploaded`);
                 core.debug(`Root artifact directory is ${searchResult.rootDirectory}`);
-                const annotations = ramda_1.chain(annotations_1.annotationsForPath, searchResult.filesToUpload);
-                core.debug(`Grouping ${annotations.length} annotations into chunks of ${MAX_ANNOTATIONS_PER_REQUEST}`);
+                const allAnnotations = ramda_1.chain(annotations_1.annotationsForPath, searchResult.filesToUpload);
+                const annotations = filter.length == 0 ? allAnnotations :
+                    allAnnotations.filter(annotation => filter.includes(annotation.path));
+                core.debug(`Grouping ${annotations.length} filtered out of ${allAnnotations.length} annotations into chunks of ${MAX_ANNOTATIONS_PER_REQUEST}`);
                 const groupedAnnotations = annotations.length > MAX_ANNOTATIONS_PER_REQUEST
                     ? ramda_1.splitEvery(MAX_ANNOTATIONS_PER_REQUEST, annotations)
                     : [annotations];
@@ -225,6 +230,20 @@ function getConclusion(annotations) {
         return 'neutral';
     }
     return 'success';
+}
+function getFilter(commit, changedSince) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (changedSince == "") {
+            return [];
+        }
+        const octokit = github_2.getOctokit(core.getInput(constants_1.Inputs.Token));
+        const head_sha = commit ||
+            (github_2.context.payload.pull_request && github_2.context.payload.pull_request.head.sha) ||
+            github_2.context.sha;
+        const req = Object.assign(Object.assign({}, github_2.context.repo), { head: head_sha, base: changedSince });
+        const compare = yield octokit.repos.compareCommits(req);
+        return compare.data.files.map(file => file.filename);
+    });
 }
 function createCheck(name, commit, title, annotations, processedErrors, numErrors, conclusion) {
     return __awaiter(this, void 0, void 0, function* () {
