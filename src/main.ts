@@ -14,7 +14,9 @@ async function run(): Promise<void> {
     const name = core.getInput(Inputs.Name)
     const title = core.getInput(Inputs.Title)
     const commit = core.getInput(Inputs.Commit)
+    const changedSince = core.getInput(Inputs.ChangedSince)
 
+    const filter = await getFilter(commit, changedSince)
     const searchResult = await findResults(path)
     if (searchResult.filesToUpload.length === 0) {
       core.warning(
@@ -29,7 +31,8 @@ async function run(): Promise<void> {
       const annotations: Annotation[] = chain(
         annotationsForPath,
         searchResult.filesToUpload
-      )
+      ).filter(annotation => filter.length == 0 || filter.includes(annotation.path))
+
       core.debug(
         `Grouping ${annotations.length} annotations into chunks of ${MAX_ANNOTATIONS_PER_REQUEST}`
       )
@@ -87,6 +90,29 @@ function getConclusion(
   }
 
   return 'success'
+}
+
+async function getFilter(
+  commit: string,
+  changedSince: string
+): Promise<string[]> {
+  if (changedSince == "") {
+    return [];
+  }
+
+  const octokit = getOctokit(core.getInput(Inputs.Token))
+
+  const head_sha = commit ||
+      (context.payload.pull_request && context.payload.pull_request.head.sha) ||
+      context.sha;
+
+  const req = {
+    ...context.repo,
+    head: head_sha,
+    base: changedSince
+  }
+  const compare = await octokit.repos.compareCommits(req)
+  return compare.data.files.map(file => file.filename)
 }
 
 async function createCheck(

@@ -3,5 +3,6 @@ export enum Inputs {
   Commit = 'commit',
   Title = 'title',
   Path = 'path',
-  Token = 'token'
+  Token = 'token',
+  ChangedSince = 'changed-since'
 }

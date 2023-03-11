@@ -113,6 +113,7 @@ var Inputs;
     Inputs["Title"] = "title";
     Inputs["Path"] = "path";
     Inputs["Token"] = "token";
+    Inputs["Token"] = "token";
 })(Inputs = exports.Inputs || (exports.Inputs = {}));
 
 
