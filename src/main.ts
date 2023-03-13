@@ -13,6 +13,7 @@ async function run(): Promise<void> {
     const path = core.getInput(Inputs.Path, {required: true})
     const name = core.getInput(Inputs.Name)
     const title = core.getInput(Inputs.Title)
+    const commit = core.getInput(Inputs.Commit)
 
     const searchResult = await findResults(path)
     if (searchResult.filesToUpload.length === 0) {
@@ -41,15 +42,19 @@ async function run(): Promise<void> {
       core.debug(`Created ${groupedAnnotations.length} buckets`)
 
       const conclusion = getConclusion(annotations)
+      let total = 0
 
       for (const annotationSet of groupedAnnotations) {
         await createCheck(
           name,
+          commit,
           title,
           annotationSet,
+          total,
           annotations.length,
           conclusion
         )
+        total += annotationSet.length
       }
     }
   } catch (error) {
@@ -86,35 +91,37 @@ function getConclusion(
 
 async function createCheck(
   name: string,
+  commit: string,
   title: string,
   annotations: Annotation[],
+  processedErrors: number,
   numErrors: number,
   conclusion: 'success' | 'failure' | 'neutral'
 ): Promise<void> {
-  core.info(
-    `Uploading ${annotations.length} / ${numErrors} annotations to GitHub as ${name} with conclusion ${conclusion}`
-  )
-  const octokit = getOctokit(core.getInput(Inputs.Token))
-  let sha = context.sha
+  const head_sha = commit ||
+      (context.payload.pull_request && context.payload.pull_request.head.sha) ||
+      context.sha;
 
-  if (context.payload.pull_request) {
-    sha = context.payload.pull_request.head.sha
-  }
+  const octokit = getOctokit(core.getInput(Inputs.Token))
 
   const req = {
     ...context.repo,
-    ref: sha
+    ref: head_sha
   }
 
   const res = await octokit.checks.listForRef(req)
   const existingCheckRun = res.data.check_runs.find(
-    check => check.name === name
+      check => check.name === name
+  )
+
+  core.info(
+    `Uploading ${processedErrors} + ${annotations.length} / ${numErrors} annotations to ${existingCheckRun ? "existing": "new"} GitHub check @${head_sha} as ${name} with conclusion ${conclusion}`
   )
 
   if (!existingCheckRun) {
     const createRequest = {
       ...context.repo,
-      head_sha: sha,
+      head_sha,
       conclusion,
       name,
       status: <const>'completed',

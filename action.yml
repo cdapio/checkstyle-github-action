@@ -11,6 +11,8 @@ inputs:
   title:
     description: 'Check run title under which the report is created'
     default: Checkstyle report
+  commit:
+    description: 'The commit sha to update the status'
   token:
     description: >
       Personal access token (PAT) used to fetch the repository. The PAT is configured
