@@ -189,7 +189,11 @@ function run() {
             const title = core.getInput(constants_1.Inputs.Title);
             const commit = core.getInput(constants_1.Inputs.Commit);
             const changedSince = core.getInput(constants_1.Inputs.ChangedSince);
-            const filter = yield getFilter(commit, changedSince);
+            const octokit = github_2.getOctokit(core.getInput(constants_1.Inputs.Token));
+            const head_sha = commit ||
+                (github_2.context.payload.pull_request && github_2.context.payload.pull_request.head.sha) ||
+                github_2.context.sha;
+            const filter = yield getFilter(octokit, head_sha, commit, changedSince);
             core.debug(`Got the filter of ${filter} files, e.g. ${filter.slice(0, 3)}`);
             const searchResult = yield search_1.findResults(path);
             if (searchResult.filesToUpload.length === 0) {
@@ -208,10 +212,12 @@ function run() {
                 core.debug(`Created ${groupedAnnotations.length} buckets`);
                 const conclusion = getConclusion(annotations);
                 let total = 0;
+                const check_run_id = yield createCheck(octokit, head_sha, name, title, annotations.length);
                 for (const annotationSet of groupedAnnotations) {
-                    yield createCheck(name, commit, title, annotationSet, total, annotations.length, conclusion);
+                    yield addAnnotations(octokit, head_sha, check_run_id, name, title, annotationSet, total, annotations.length);
                     total += annotationSet.length;
                 }
+                yield completeCheck(octokit, head_sha, check_run_id, name, title, annotations.length, conclusion);
             }
         }
         catch (error) {
@@ -241,50 +247,47 @@ function getConclusion(annotations) {
     }
     return 'success';
 }
-function getFilter(commit, changedSince) {
+function getFilter(octokit, head_sha, commit, changedSince) {
     return __awaiter(this, void 0, void 0, function* () {
         if (changedSince == "") {
             return [];
         }
-        const octokit = github_2.getOctokit(core.getInput(constants_1.Inputs.Token));
-        const head_sha = commit ||
-            (github_2.context.payload.pull_request && github_2.context.payload.pull_request.head.sha) ||
-            github_2.context.sha;
         const req = Object.assign(Object.assign({}, github_2.context.repo), { head: head_sha, base: changedSince });
         const compare = yield octokit.repos.compareCommits(req);
         return compare.data.files.map(file => file.filename);
     });
 }
-function createCheck(name, commit, title, annotations, processedErrors, numErrors, conclusion) {
+function createCheck(octokit, head_sha, name, title, numErrors) {
     return __awaiter(this, void 0, void 0, function* () {
-        const head_sha = commit ||
-            (github_2.context.payload.pull_request && github_2.context.payload.pull_request.head.sha) ||
-            github_2.context.sha;
-        const octokit = github_2.getOctokit(core.getInput(constants_1.Inputs.Token));
-        const req = Object.assign(Object.assign({}, github_2.context.repo), { ref: head_sha });
-        const res = yield octokit.checks.listForRef(req);
-        const existingCheckRun = res.data.check_runs.find(check => check.name === name);
-        core.info(`Uploading ${processedErrors} + ${annotations.length} / ${numErrors} annotations to ${existingCheckRun ? "existing" : "new"} GitHub check @${head_sha} as ${name} with conclusion ${conclusion}`);
-        if (!existingCheckRun) {
-            const createRequest = Object.assign(Object.assign({}, github_2.context.repo), { head_sha,
-                conclusion,
-                name, status: 'completed', output: {
-                    title,
-                    summary: `${numErrors} violation(s) found`,
-                    annotations
-                } });
-            yield octokit.checks.create(createRequest);
-        }
-        else {
-            const check_run_id = existingCheckRun.id;
-            const update_req = Object.assign(Object.assign({}, github_2.context.repo), { conclusion,
-                check_run_id, status: 'completed', output: {
-                    title,
-                    summary: `${numErrors} violation(s) found`,
-                    annotations
-                } });
-            yield octokit.checks.update(update_req);
-        }
+        const createRequest = Object.assign(Object.assign({}, github_2.context.repo), { head_sha,
+            name, status: 'in_progress', output: {
+                title,
+                summary: `${numErrors} violation(s) found`,
+            } });
+        const result = yield octokit.checks.create(createRequest);
+        return result.data.id;
+    });
+}
+function addAnnotations(octokit, head_sha, check_run_id, name, title, annotations, processedErrors, numErrors) {
+    return __awaiter(this, void 0, void 0, function* () {
+        core.info(`Uploading ${processedErrors} + ${annotations.length} / ${numErrors} annotations GitHub check ${check_run_id}@${head_sha} as ${name}`);
+        const update_req = Object.assign(Object.assign({}, github_2.context.repo), { check_run_id, output: {
+                title,
+                summary: `${numErrors} violation(s) found`,
+                annotations
+            } });
+        yield octokit.checks.update(update_req);
+    });
+}
+function completeCheck(octokit, head_sha, check_run_id, name, title, numErrors, conclusion) {
+    return __awaiter(this, void 0, void 0, function* () {
+        core.info(`Finishing GitHub check ${check_run_id}@${head_sha} as ${name} with conclusion ${conclusion}`);
+        const update_req = Object.assign(Object.assign({}, github_2.context.repo), { conclusion,
+            check_run_id, status: 'completed', output: {
+                title,
+                summary: `${numErrors} violation(s) found`,
+            } });
+        yield octokit.checks.update(update_req);
     });
 }
 run();

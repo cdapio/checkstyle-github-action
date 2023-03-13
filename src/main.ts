@@ -5,6 +5,7 @@ import {annotationsForPath} from './annotations'
 import {chain, groupBy, splitEvery} from 'ramda'
 import {Annotation, AnnotationLevel} from './github'
 import {context, getOctokit} from '@actions/github'
+import {GitHub} from '@actions/github/lib/utils';
 
 const MAX_ANNOTATIONS_PER_REQUEST = 50
 
@@ -18,7 +19,13 @@ async function run(): Promise<void> {
     const commit = core.getInput(Inputs.Commit)
     const changedSince = core.getInput(Inputs.ChangedSince)
 
-    const filter = await getFilter(commit, changedSince)
+    const octokit = getOctokit(core.getInput(Inputs.Token))
+
+    const head_sha = commit ||
+        (context.payload.pull_request && context.payload.pull_request.head.sha) ||
+        context.sha;
+
+    const filter = await getFilter(octokit, head_sha, commit, changedSince)
     core.debug(`Got the filter of ${filter} files, e.g. ${filter.slice(0, 3)}`)
     const searchResult = await findResults(path)
     if (searchResult.filesToUpload.length === 0) {
@@ -52,18 +59,38 @@ async function run(): Promise<void> {
       const conclusion = getConclusion(annotations)
       let total = 0
 
-      for (const annotationSet of groupedAnnotations) {
-        await createCheck(
+      const check_run_id = await createCheck(
+          octokit,
+          head_sha,
           name,
-          commit,
+          title,
+          annotations.length
+      )
+
+      for (const annotationSet of groupedAnnotations) {
+        await addAnnotations(
+          octokit,
+          head_sha,
+          check_run_id,
+          name,
           title,
           annotationSet,
           total,
           annotations.length,
-          conclusion
         )
         total += annotationSet.length
       }
+
+      await completeCheck(
+          octokit,
+          head_sha,
+          check_run_id,
+          name,
+          title,
+          annotations.length,
+          conclusion
+      )
+
     }
   } catch (error) {
     core.setFailed(error)
@@ -106,18 +133,14 @@ function getConclusion(
 }
 
 async function getFilter(
+  octokit: InstanceType<typeof GitHub>,
+  head_sha: string,
   commit: string,
   changedSince: string
 ): Promise<string[]> {
   if (changedSince == "") {
     return [];
   }
-
-  const octokit = getOctokit(core.getInput(Inputs.Token))
-
-  const head_sha = commit ||
-      (context.payload.pull_request && context.payload.pull_request.head.sha) ||
-      context.sha;
 
   const req = {
     ...context.repo,
@@ -129,66 +152,82 @@ async function getFilter(
 }
 
 async function createCheck(
+    octokit: InstanceType<typeof GitHub>,
+    head_sha: string,
+    name: string,
+    title: string,
+    numErrors: number,
+): Promise<number> {
+
+    const createRequest = {
+      ...context.repo,
+      head_sha,
+      name,
+      status: <const>'in_progress',
+      output: {
+        title,
+        summary: `${numErrors} violation(s) found`,
+      }
+    }
+
+  const result = await octokit.checks.create(createRequest)
+  return result.data.id
+}
+
+async function addAnnotations(
+  octokit: InstanceType<typeof GitHub>,
+  head_sha: string,
+  check_run_id: number,
   name: string,
-  commit: string,
   title: string,
   annotations: Annotation[],
   processedErrors: number,
   numErrors: number,
-  conclusion: Conclusions
 ): Promise<void> {
-  const head_sha = commit ||
-      (context.payload.pull_request && context.payload.pull_request.head.sha) ||
-      context.sha;
-
-  const octokit = getOctokit(core.getInput(Inputs.Token))
-
-  const req = {
-    ...context.repo,
-    ref: head_sha
-  }
-
-  const res = await octokit.checks.listForRef(req)
-  const existingCheckRun = res.data.check_runs.find(
-      check => check.name === name
-  )
 
   core.info(
-    `Uploading ${processedErrors} + ${annotations.length} / ${numErrors} annotations to ${existingCheckRun ? "existing": "new"} GitHub check @${head_sha} as ${name} with conclusion ${conclusion}`
+    `Uploading ${processedErrors} + ${annotations.length} / ${numErrors} annotations GitHub check ${check_run_id}@${head_sha} as ${name}`
   )
 
-  if (!existingCheckRun) {
-    const createRequest = {
-      ...context.repo,
-      head_sha,
-      conclusion,
-      name,
-      status: <const>'completed',
-      output: {
-        title,
-        summary: `${numErrors} violation(s) found`,
-        annotations
-      }
+  const update_req = {
+    ...context.repo,
+    check_run_id,
+    output: {
+      title,
+      summary: `${numErrors} violation(s) found`,
+      annotations
     }
-
-    await octokit.checks.create(createRequest)
-  } else {
-    const check_run_id = existingCheckRun.id
-
-    const update_req = {
-      ...context.repo,
-      conclusion,
-      check_run_id,
-      status: <const>'completed',
-      output: {
-        title,
-        summary: `${numErrors} violation(s) found`,
-        annotations
-      }
-    }
-
-    await octokit.checks.update(update_req)
   }
+
+  await octokit.checks.update(update_req)
+}
+
+async function completeCheck(
+    octokit: InstanceType<typeof GitHub>,
+    head_sha: string,
+    check_run_id: number,
+    name: string,
+    title: string,
+    numErrors: number,
+    conclusion: Conclusions
+): Promise<void> {
+
+  core.info(
+      `Finishing GitHub check ${check_run_id}@${head_sha} as ${name} with conclusion ${conclusion}`
+  )
+
+  const update_req = {
+    ...context.repo,
+    conclusion,
+    check_run_id,
+    status: <const>'completed',
+    output: {
+      title,
+      summary: `${numErrors} violation(s) found`,
+    }
+  }
+
+  await octokit.checks.update(update_req)
 }
 
 run()
