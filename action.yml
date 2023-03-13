@@ -28,6 +28,18 @@ inputs:
       between the current commit and the base commit. Set this parameter to base branch name or commit to 
       skip marking violations on unchanged files. This is especially useful when project code style is changed
       and iterative clean-up is performed.
+  error-conclusion:
+    description: >
+      Conclusion to set for the check when error (and lower) violations are present.
+    default: failure
+  warning-conclusion:
+    description: >
+      Conclusion to set for the check when only warning (and lower) violations are present.
+    default: neutral
+  notice-conclusion:
+    description: >
+      Conclusion to set for the check when only notice violations are present.
+    default: success
 runs:
   using: 'node12'
   main: 'dist/index.js'

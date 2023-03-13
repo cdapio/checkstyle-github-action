@@ -8,6 +8,8 @@ import {context, getOctokit} from '@actions/github'
 
 const MAX_ANNOTATIONS_PER_REQUEST = 50
 
+type Conclusions = 'success' | 'failure' | 'neutral'
+
 async function run(): Promise<void> {
   try {
     const path = core.getInput(Inputs.Path, {required: true})
@@ -70,7 +72,7 @@ async function run(): Promise<void> {
 
 function getConclusion(
   annotations: Annotation[]
-): 'success' | 'failure' | 'neutral' {
+): Conclusions {
   if (annotations.length === 0) {
     return 'success'
   }
@@ -84,12 +86,20 @@ function getConclusion(
     annotationsByLevel[AnnotationLevel.failure] &&
     annotationsByLevel[AnnotationLevel.failure].length
   ) {
-    return 'failure'
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    return <Conclusions> core.getInput(Inputs.ErrorConclusion)
   } else if (
     annotationsByLevel[AnnotationLevel.warning] &&
     annotationsByLevel[AnnotationLevel.warning].length
   ) {
-    return 'neutral'
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    return <Conclusions> core.getInput(Inputs.WarningConclusion)
+  } else if (
+      annotationsByLevel[AnnotationLevel.notice] &&
+      annotationsByLevel[AnnotationLevel.notice].length
+  ) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    return <Conclusions> core.getInput(Inputs.NoticeConclusion)
   }
 
   return 'success'
@@ -125,7 +135,7 @@ async function createCheck(
   annotations: Annotation[],
   processedErrors: number,
   numErrors: number,
-  conclusion: 'success' | 'failure' | 'neutral'
+  conclusion: Conclusions
 ): Promise<void> {
   const head_sha = commit ||
       (context.payload.pull_request && context.payload.pull_request.head.sha) ||

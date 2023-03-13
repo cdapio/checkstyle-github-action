@@ -33,6 +33,11 @@ between the current commit and the base commit. Set this parameter to base branc
 skip marking violations on unchanged files. This is especially useful when project code style is changed
 and iterative clean-up is performed.
 
+### `error-conclusion`, `warning-conclusion`, `notice-conclusion`
+Options. These options allow changing check run conclusion based on maximum level of 
+violations present. Default is `failure`, `neutral`, `success` respectively.
+E.g. you may fail the check on warnings by setting `warning-conclusion: failure`.
+
 ## Example usage
 
 ```yaml

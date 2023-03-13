@@ -4,5 +4,8 @@ export enum Inputs {
   Title = 'title',
   Path = 'path',
   Token = 'token',
-  ChangedSince = 'changed-since'
+  ChangedSince = 'changed-since',
+  ErrorConclusion = 'error-conclusion',
+  WarningConclusion = 'warning-conclusion',
+  NoticeConclusion = 'notice-conclusion',
 }

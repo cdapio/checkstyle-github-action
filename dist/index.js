@@ -114,6 +114,9 @@ var Inputs;
     Inputs["Path"] = "path";
     Inputs["Token"] = "token";
     Inputs["ChangedSince"] = "changed-since";
+    Inputs["ErrorConclusion"] = "error-conclusion";
+    Inputs["WarningConclusion"] = "warning-conclusion";
+    Inputs["NoticeConclusion"] = "notice-conclusion";
 })(Inputs = exports.Inputs || (exports.Inputs = {}));
 
 
@@ -223,11 +226,18 @@ function getConclusion(annotations) {
     const annotationsByLevel = ramda_1.groupBy(a => a.annotation_level, annotations);
     if (annotationsByLevel[github_1.AnnotationLevel.failure] &&
         annotationsByLevel[github_1.AnnotationLevel.failure].length) {
-        return 'failure';
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+        return core.getInput(constants_1.Inputs.ErrorConclusion);
     }
     else if (annotationsByLevel[github_1.AnnotationLevel.warning] &&
         annotationsByLevel[github_1.AnnotationLevel.warning].length) {
-        return 'neutral';
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+        return core.getInput(constants_1.Inputs.WarningConclusion);
+    }
+    else if (annotationsByLevel[github_1.AnnotationLevel.notice] &&
+        annotationsByLevel[github_1.AnnotationLevel.notice].length) {
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+        return core.getInput(constants_1.Inputs.NoticeConclusion);
     }
     return 'success';
 }
