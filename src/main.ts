@@ -14,7 +14,10 @@ async function run(): Promise<void> {
     const name = core.getInput(Inputs.Name)
     const title = core.getInput(Inputs.Title)
     const commit = core.getInput(Inputs.Commit)
+    const changedSince = core.getInput(Inputs.ChangedSince)
 
+    const filter = await getFilter(commit, changedSince)
+    core.debug(`Got the filter of ${filter} files, e.g. ${filter.slice(0, 3)}`)
     const searchResult = await findResults(path)
     if (searchResult.filesToUpload.length === 0) {
       core.warning(
@@ -26,12 +29,15 @@ async function run(): Promise<void> {
       )
       core.debug(`Root artifact directory is ${searchResult.rootDirectory}`)
 
-      const annotations: Annotation[] = chain(
+      const allAnnotations: Annotation[] = chain(
         annotationsForPath,
         searchResult.filesToUpload
       )
+      const annotations = filter.length == 0 ? allAnnotations :
+        allAnnotations.filter(annotation => filter.includes(annotation.path))
+
       core.debug(
-        `Grouping ${annotations.length} annotations into chunks of ${MAX_ANNOTATIONS_PER_REQUEST}`
+        `Grouping ${annotations.length} filtered out of ${allAnnotations.length} annotations into chunks of ${MAX_ANNOTATIONS_PER_REQUEST}`
       )
 
       const groupedAnnotations: Annotation[][] =
@@ -87,6 +93,29 @@ function getConclusion(
   }
 
   return 'success'
+}
+
+async function getFilter(
+  commit: string,
+  changedSince: string
+): Promise<string[]> {
+  if (changedSince == "") {
+    return [];
+  }
+
+  const octokit = getOctokit(core.getInput(Inputs.Token))
+
+  const head_sha = commit ||
+      (context.payload.pull_request && context.payload.pull_request.head.sha) ||
+      context.sha;
+
+  const req = {
+    ...context.repo,
+    head: head_sha,
+    base: changedSince
+  }
+  const compare = await octokit.repos.compareCommits(req)
+  return compare.data.files.map(file => file.filename)
 }
 
 async function createCheck(

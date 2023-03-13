@@ -22,6 +22,12 @@ inputs:
       Also when generating a new PAT, select the least scopes necessary.
       [Learn more about creating and using encrypted secrets](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/creating-and-using-encrypted-secrets)
     default: ${{ github.token }}
+  changed-since:
+    description: >
+      This option allow uploading only violations in files that were changed 
+      between the current commit and the base commit. Set this parameter to base branch name or commit to 
+      skip marking violations on unchanged files. This is especially useful when project code style is changed
+      and iterative clean-up is performed.
 runs:
   using: 'node12'
   main: 'dist/index.js'

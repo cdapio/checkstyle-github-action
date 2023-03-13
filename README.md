@@ -27,6 +27,12 @@ Optional. Title for the check run to create. Defaults to `Checkstyle Source Code
 ### `token`
 Optional. GitHub API access token. Defaults to `${{ github.token }}`, which is set by `actions/checkout@v2` minimally.
 
+### `changed-since`
+Optional. This option allow uploading only violations in files that were changed 
+between the current commit and the base commit. Set this parameter to base branch name or commit to 
+skip marking violations on unchanged files. This is especially useful when project code style is changed
+and iterative clean-up is performed.
+
 ## Example usage
 
 ```yaml
