@@ -27,10 +27,10 @@
   "dependencies": {
     "@actions/core": "^1.2.6",
     "@actions/exec": "^1.0.4",
-    "@actions/github": "^4.0.0",
+    "@actions/github": "^6.0.0",
     "@actions/glob": "^0.1.0",
     "@actions/io": "^1.0.2",
-    "@octokit/rest": "18.0.12",
+    "@octokit/rest": "21.1.1",
     "@types/html-to-text": "^6.0.0",
     "html-to-text": "^6.0.0",
     "fast-xml-parser": "^3.17.4",
